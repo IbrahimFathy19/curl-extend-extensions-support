@@ -1020,23 +1020,24 @@ Curl_cookie_add(struct Curl_easy *data,
   }
 #endif
 
+  /* A non-secure cookie may not overlay an existing secure cookie. */
+
   myhash = cookiehash(co->domain);
   clist = c->cookies[myhash];
-  replace_old = FALSE;
   while(clist) {
     if(strcasecompare(clist->name, co->name)) {
       /* the names are identical */
+      int matching_domains = FALSE;
 
       if(clist->domain && co->domain) {
-        if(strcasecompare(clist->domain, co->domain) &&
-          (clist->tailmatch == co->tailmatch))
+        if(strcasecompare(clist->domain, co->domain))
           /* The domains are identical */
-          replace_old = TRUE;
+          matching_domains = TRUE;
       }
       else if(!clist->domain && !co->domain)
-        replace_old = TRUE;
+        matching_domains = TRUE;
 
-      if(replace_old) {
+      if(matching_domains) {
         /* the domains were identical */
 
         if(clist->spath && co->spath) {
@@ -1059,11 +1060,39 @@ Curl_cookie_add(struct Curl_easy *data,
               cllen = strlen(clist->spath);
 
             if(strncasecompare(clist->spath, co->spath, cllen)) {
+              infof(data, "cookie '%s' for domain '%s' dropped, would "
+                          "overlay an existing cookie", co->name, co->domain);
               freecookie(co);
               return NULL;
             }
           }
-          else if(strcasecompare(clist->spath, co->spath))
+        }
+      }
+    }
+    lastc = clist;
+    clist = clist->next;
+  }
+
+  clist = c->cookies[myhash];
+  replace_old = FALSE;
+  while(clist) {
+    if(strcasecompare(clist->name, co->name)) {
+      /* the names are identical */
+
+      if(clist->domain && co->domain) {
+        if(strcasecompare(clist->domain, co->domain) &&
+          (clist->tailmatch == co->tailmatch))
+          /* The domains are identical */
+          replace_old = TRUE;
+      }
+      else if(!clist->domain && !co->domain)
+        replace_old = TRUE;
+
+      if(replace_old) {
+        /* the domains were identical */
+
+        if(clist->spath && co->spath) {
+          if(strcasecompare(clist->spath, co->spath))
             replace_old = TRUE;
           else
             replace_old = FALSE;
